@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Copy, Check, Info } from 'lucide-react';
 
-// RGB to LAB conversion helper
 const rgbToLab = (R, G, B) => {
   let r = R / 255;
   let g = G / 255;
@@ -15,240 +14,350 @@ const rgbToLab = (R, G, B) => {
   g *= 100;
   b *= 100;
 
-  // D65 Standard Illuminant
   let x = r * 0.4124 + g * 0.3576 + b * 0.1805;
   let y = r * 0.2126 + g * 0.7152 + b * 0.0722;
   let z = r * 0.0193 + g * 0.1192 + b * 0.9505;
 
   x /= 95.047;
-  y /= 100.0;
+  y /= 100;
   z /= 108.883;
 
-  const fx = x > 0.008856 ? Math.pow(x, 1 / 3) : (7.787 * x) + (16 / 116);
-  const fy = y > 0.008856 ? Math.pow(y, 1 / 3) : (7.787 * y) + (16 / 116);
-  const fz = z > 0.008856 ? Math.pow(z, 1 / 3) : (7.787 * z) + (16 / 116);
-
-  const l = (116 * fy) - 16;
-  const a = 500 * (fx - fy);
-  const b_lab = 200 * (fy - fz);
-
-  return { l, a, b: b_lab };
-};
-
-// RGB to HSV (OpenCV scaled ranges) helper
-const rgbToHsv = (R, G, B) => {
-  const r = R / 255;
-  const g = G / 255;
-  const b = B / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const d = max - min;
-  let h = 0;
-  const s = max === 0 ? 0 : d / max;
-  const v = max;
-
-  if (max !== min) {
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-      case g: h = (b - r) / d + 2; break;
-      case b: h = (r - g) / d + 4; break;
-      default: break;
-    }
-    h /= 6;
-  }
+  const fx = x > 0.008856 ? Math.pow(x,1/3) : (7.787*x)+(16/116);
+  const fy = y > 0.008856 ? Math.pow(y,1/3) : (7.787*y)+(16/116);
+  const fz = z > 0.008856 ? Math.pow(z,1/3) : (7.787*z)+(16/116);
 
   return {
-    h: Math.round(h * 180),
-    s: Math.round(s * 255),
-    v: Math.round(v * 255),
+    l:(116*fy)-16,
+    a:500*(fx-fy),
+    b:200*(fy-fz)
   };
 };
 
-const ColorDetailsPanel = ({ analysisData, onColorChange }) => {
-  const [copied, setCopied] = useState(false);
+
+const ColorDetailsPanel = ({analysisData,onColorChange}) => {
+
+  const [copied,setCopied] = useState(false);
   const imgRef = useRef(null);
 
-  if (!analysisData) {
-    return (
-      <div className="border border-dashed border-slate-800 bg-slate-950/20 rounded-xl p-5 flex flex-col items-center justify-center text-center h-full min-h-[300px]">
-        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-850 text-slate-500 text-xs font-bold mb-3">3</span>
-        <p className="text-slate-500 font-sans text-xs">
-          3. Crop image to load color &amp; details
+
+  if(!analysisData){
+    return(
+      <div className="border border-dashed border-slate-800 bg-slate-950/20 rounded-xl p-5 flex items-center justify-center h-full">
+        <p className="text-slate-500 text-xs">
+          Crop image to load color details
         </p>
       </div>
-    );
+    )
   }
 
-  const { roi_image, color_features } = analysisData;
-  const hex   = color_features?.hex   ?? '#000000';
-  const R     = color_features?.R     ?? 0;
-  const G     = color_features?.G     ?? 0;
-  const B     = color_features?.B     ?? 0;
-  const L     = color_features?.L     ?? 0;
-  const A     = color_features?.A     ?? 0;
-  const B_lab = color_features?.B_lab ?? 0;
 
-  const handleCopy = () => {
+  const {roi_image,color_features}=analysisData;
+
+
+  const hex=color_features?.hex ?? "#000000";
+
+  const R=color_features?.R ?? 0;
+  const G=color_features?.G ?? 0;
+  const B=color_features?.B ?? 0;
+
+  const L=color_features?.CIE_L_star ?? 0;
+  const A=color_features?.CIE_a_star ?? 0;
+  const B_lab=color_features?.CIE_b_star ?? 0;
+
+
+  const copyHex=()=>{
     navigator.clipboard.writeText(hex);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
-  const handleImageClick = (e) => {
-    const img = imgRef.current;
-    if (!img || !img.complete) return;
+    setTimeout(()=>{
+      setCopied(false)
+    },2000)
+  }
 
-    // Create a temporary canvas to extract pixel color
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
 
-    const rect = img.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
 
-    const scaleX = img.naturalWidth / rect.width;
-    const scaleY = img.naturalHeight / rect.height;
-    
-    const x = Math.min(Math.max(0, Math.floor(clickX * scaleX)), img.naturalWidth - 1);
-    const y = Math.min(Math.max(0, Math.floor(clickY * scaleY)), img.naturalHeight - 1);
+  const handleImageClick=(e)=>{
 
-    try {
-      const pixel = ctx.getImageData(x, y, 1, 1).data;
-      const rVal = pixel[0];
-      const gVal = pixel[1];
-      const bVal = pixel[2];
+    const img=imgRef.current;
+    if(!img)return;
 
-      const toHex = (c) => c.toString(16).padStart(2, '0').toUpperCase();
-      const nextHex = `#${toHex(rVal)}${toHex(gVal)}${toHex(bVal)}`;
 
-      const { l: lVal, a: aVal, b: bValLab } = rgbToLab(rVal, gVal, bVal);
-      const { h: hVal, s: sVal, v: vVal } = rgbToHsv(rVal, gVal, bVal);
+    const canvas=document.createElement("canvas");
 
-      // Trigger callback to App.jsx to update the analysis state
-      if (onColorChange) {
-        onColorChange({
-          hex: nextHex,
-          R: rVal,
-          G: gVal,
-          B: bVal,
-          H: hVal,
-          S: sVal,
-          V: vVal,
-          L: lVal,
-          A: aVal,
-          B_lab: bValLab,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to extract color from canvas: ", err);
-    }
-  };
+    canvas.width=img.naturalWidth;
+    canvas.height=img.naturalHeight;
 
-  return (
-    <div className="border border-slate-800 bg-slate-950/40 rounded-xl p-5 glow-border flex flex-col h-full">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold">3</span>
-        <span className="font-sans font-bold text-sm tracking-wide text-blue-500">Color &amp; Details</span>
-      </div>
 
-      <div className="space-y-4 flex-grow">
-        {/* Cropped Image section */}
-        <div>
-          <p className="font-sans text-[11px] font-semibold text-slate-400 mb-1.5">Cropped Image</p>
-          <div className="aspect-[2.2/1] w-full rounded-lg overflow-hidden border border-slate-800 bg-slate-950 relative">
-            {roi_image ? (
-              <img
-                ref={imgRef}
-                src={roi_image}
-                alt="Cropped region"
-                className="w-full h-full object-cover cursor-crosshair"
-                onClick={handleImageClick}
-                crossOrigin="anonymous"
-              />
-            ) : (
-              <div className="w-full h-full" style={{ backgroundColor: hex }} />
-            )}
-          </div>
-        </div>
+    const ctx=canvas.getContext("2d");
 
-        {/* Selected Color Section */}
-        <div>
-          <p className="font-sans text-[11px] font-semibold text-slate-400 mb-1.5">Selected Color</p>
-          <div className="flex gap-3 items-center">
-            {/* Color block */}
-            <div
-              className="w-10 h-10 rounded-lg border border-slate-800 flex-shrink-0"
-              style={{ backgroundColor: hex }}
-            />
-            {/* White input-style HEX indicator */}
-            <div className="flex-grow flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-850 shadow-sm">
-              <span className="font-sans font-black text-sm tracking-widest">{hex}</span>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 cursor-pointer transition-colors"
-                title="Copy HEX"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
-        </div>
+    ctx.drawImage(img,0,0);
 
-        {/* RGB and LAB side-by-side metric cards */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* RGB */}
-          <div className="bg-slate-950/80 border border-slate-900 rounded-lg p-3">
-            <span className="font-mono text-[9px] text-slate-500 uppercase tracking-widest block mb-2">RGB</span>
-            <div className="space-y-1 font-mono text-xs text-slate-300">
-              <div className="flex justify-between">
-                <span>R:</span>
-                <span className="font-bold">{Math.round(R)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>G:</span>
-                <span className="font-bold">{Math.round(G)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>B:</span>
-                <span className="font-bold">{Math.round(B)}</span>
-              </div>
-            </div>
-          </div>
 
-          {/* LAB */}
-          <div className="bg-slate-950/80 border border-slate-900 rounded-lg p-3">
-            <span className="font-mono text-[9px] text-slate-500 uppercase tracking-widest block mb-2">LAB</span>
-            <div className="space-y-1 font-mono text-xs text-slate-300">
-              <div className="flex justify-between">
-                <span>L:</span>
-                <span className="font-bold">{L.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>a:</span>
-                <span className="font-bold">{A.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>b:</span>
-                <span className="font-bold">{B_lab.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+    const rect=img.getBoundingClientRect();
 
-        {/* Notice */}
-        <div className="flex items-start gap-2 p-2.5 bg-blue-950/10 border border-blue-900/20 rounded-lg">
-          <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
-          <p className="text-[10px] font-mono text-slate-400 leading-normal">
-            Click on the image to select a different color. The values will update automatically
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
+
+    const x=Math.floor(
+      (e.clientX-rect.left)
+      *
+      img.naturalWidth/rect.width
+    );
+
+
+    const y=Math.floor(
+      (e.clientY-rect.top)
+      *
+      img.naturalHeight/rect.height
+    );
+
+
+    const pixel=ctx.getImageData(x,y,1,1).data;
+
+
+    const r=pixel[0];
+    const g=pixel[1];
+    const b=pixel[2];
+
+
+    const toHex=(v)=>
+      v.toString(16).padStart(2,"0").toUpperCase();
+
+
+    const newHex=
+      `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+
+
+    const lab=rgbToLab(r,g,b);
+
+
+
+    onColorChange?.({
+
+      hex:newHex,
+
+      R:r,
+      G:g,
+      B:b,
+
+      CIE_L_star:lab.l,
+      CIE_a_star:lab.a,
+      CIE_b_star:lab.b
+
+    });
+
+  }
+
+
+
+return(
+
+<div className="border border-slate-800 bg-slate-950/40 rounded-xl p-5 glow-border">
+
+{/* HEADER */}
+
+<div className="flex items-center gap-2 mb-4">
+
+<span className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold">
+3
+</span>
+
+<span className="font-bold text-sm text-blue-500">
+Color & Details
+</span>
+
+</div>
+
+
+
+{/* IMAGE */}
+
+<p className="text-xs text-slate-400 mb-2">
+Cropped Image
+</p>
+
+
+<div className="aspect-[2.2/1] rounded-lg overflow-hidden border border-slate-800">
+
+<img
+
+ref={imgRef}
+
+src={roi_image}
+
+className="w-full h-full object-cover cursor-crosshair"
+
+onClick={handleImageClick}
+
+/>
+
+</div>
+
+
+
+
+{/* HEX */}
+
+<p className="text-xs text-slate-400 mt-4 mb-2">
+Selected Color
+</p>
+
+
+
+<div className="flex items-center gap-3">
+
+
+<div
+
+className="w-10 h-10 rounded-lg border border-slate-700"
+
+style={{backgroundColor:hex}}
+
+/>
+
+
+
+<div className="
+flex-1
+flex
+items-center
+justify-between
+rounded-lg
+px-3
+py-2
+bg-slate-900
+border
+border-blue-500/40
+">
+
+
+<span className="
+text-blue-400
+font-mono
+font-bold
+text-sm
+tracking-widest
+">
+
+{hex.toUpperCase()}
+
+</span>
+
+
+
+<button
+
+onClick={copyHex}
+
+className="text-blue-400 hover:text-blue-200"
+
+>
+
+{
+copied
+?
+<Check size={15}/>
+:
+<Copy size={15}/>
+}
+
+</button>
+
+
+</div>
+
+</div>
+
+
+
+
+
+{/* RGB LAB */}
+
+<div className="grid grid-cols-2 gap-3 mt-4">
+
+
+<div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+
+<p className="text-xs text-slate-500 mb-2">
+RGB
+</p>
+
+
+<p className="text-blue-400 font-mono">
+R: {Math.round(R)}
+</p>
+
+<p className="text-blue-400 font-mono">
+G: {Math.round(G)}
+</p>
+
+<p className="text-blue-400 font-mono">
+B: {Math.round(B)}
+</p>
+
+
+</div>
+
+
+
+
+<div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
+
+<p className="text-xs text-slate-500 mb-2">
+CIE L*a*b*
+</p>
+
+
+<p className="text-blue-400 font-mono">
+L*: {L.toFixed(2)}
+</p>
+
+<p className="text-blue-400 font-mono">
+a*: {A.toFixed(2)}
+</p>
+
+<p className="text-blue-400 font-mono">
+b*: {B_lab.toFixed(2)}
+</p>
+
+
+</div>
+
+
+</div>
+
+
+
+
+<div className="
+mt-4
+flex
+gap-2
+p-3
+rounded-lg
+bg-blue-950/20
+border
+border-blue-500/20
+">
+
+<Info size={14} className="text-blue-400"/>
+
+<p className="text-xs text-slate-400">
+
+Click image to select another pixel color.
+Values update automatically.
+
+</p>
+
+
+</div>
+
+
+</div>
+
+)
+
+
+}
+
 
 export default ColorDetailsPanel;
