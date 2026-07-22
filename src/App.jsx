@@ -4,7 +4,7 @@ import CameraPreview from './components/CameraPreview';
 import CropImagePanel from './components/CropImagePanel';
 import ColorDetailsPanel from './components/ColorDetailsPanel';
 import PredictionPanel from './components/PredictionPanel';
-import { captureImage, analyzeRoi, predictColor } from './api';
+import { captureImage, analyzeRoi, predictWaterQuality } from './api';
 
 function App() {
   const [isCapturing, setIsCapturing]         = useState(false);
@@ -64,7 +64,7 @@ function App() {
     setErrorMsg(null);
 
     try {
-      const result = await predictColor(analysisData.color_features);
+      const result = await predictWaterQuality(analysisData.color_features);
       setPredictionResult(result);
     } catch (err) {
       setErrorMsg(err.message || 'Prediction failed.');

@@ -52,7 +52,7 @@ export const captureImage = async () => {
 };
 
 /**
- * POST /analyze_roi — crop user-selected ROI and compute average colour.
+ * POST /analyze_roi — crop user-selected ROI and compute RGB + CIE L*a*b* colour features.
  */
 export const analyzeRoi = async (imageName, crop) => {
   try {
@@ -84,60 +84,52 @@ export const analyzeRoi = async (imageName, crop) => {
 };
 
 /**
- * POST /save_dataset — persist best frame + ROI + colour + labels.
+ * POST /predict — run ML models (pH, conductivity, TDS, conditions, water class,
+ * system output + probabilities) from RGB + CIE L*a*b* colour features.
  */
-export const saveDataset = async (payload) => {
+export const predictWaterQuality = async (colorFeatures) => {
   try {
-    const { data } = await client.post('/save_dataset', {
-      image_name:     payload.image_name,
-      save_name:      payload.save_name,
-      ph_meter_value: payload.ph_value,
-      water_class:    payload.water_class,
-      water_source:   payload.water_source,
-      // Pass color overrides if user picked a color
-      hex:            payload.hex,
-      R:              payload.R,
-      G:              payload.G,
-      B:              payload.B,
-      H:              payload.H,
-      S:              payload.S,
-      V:              payload.V,
-      L:              payload.L,
-      A:              payload.A,
-      B_lab:          payload.B_lab,
+    const { data } = await client.post('/predict', {
+      R:            colorFeatures.R,
+      G:            colorFeatures.G,
+      B:            colorFeatures.B,
+      CIE_L_star:   colorFeatures.CIE_L_star,
+      CIE_a_star:   colorFeatures.CIE_a_star,
+      CIE_b_star:   colorFeatures.CIE_b_star,
     });
-    return data;
+
+    return {
+      predicted_ph:                  data.predicted_ph,
+      predicted_conductivity:        data.predicted_conductivity,
+      tds_lower:                     data.tds_lower,
+      tds_upper:                     data.tds_upper,
+      ph_condition:                  data.ph_condition,
+      ec_condition:                  data.ec_condition,
+      water_class:                   data.water_class,
+      system_output:                 data.system_output,
+      system_output_probabilities:   data.system_output_probabilities,
+    };
   } catch (error) {
-    console.error('Save Dataset API error:', error);
+    console.error('Predict API error:', error);
     throw new Error(
       error.response?.data?.detail ||
-      'Failed to save dataset record. Is the backend running on port 8000?'
+      'Failed to predict water quality. Is the model trained and backend running?'
     );
   }
 };
 
 /**
- * POST /predict — classify water sample from colour features.
+ * GET /health — backend/model readiness check.
  */
-export const predictColor = async (colorFeatures) => {
+export const healthCheck = async () => {
   try {
-    const { data } = await client.post('/predict', {
-      R:     colorFeatures.R,
-      G:     colorFeatures.G,
-      B:     colorFeatures.B,
-      H:     colorFeatures.H,
-      S:     colorFeatures.S,
-      V:     colorFeatures.V,
-      L:     colorFeatures.L,
-      A:     colorFeatures.A,
-      B_lab: colorFeatures.B_lab,
-    });
+    const { data } = await client.get('/health');
     return data;
   } catch (error) {
-    console.error('Predict API error:', error);
+    console.error('Health check error:', error);
     throw new Error(
       error.response?.data?.detail ||
-      'Failed to predict water class. Is the model trained and backend running?'
+      'Backend health check failed. Is the backend running on port 8000?'
     );
   }
 };
